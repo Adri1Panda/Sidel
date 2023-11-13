@@ -1,0 +1,1237 @@
+<html>
+  <head>
+    <!--
+        <link rel="stylesheet" type="text/css" href="style.css">
+    -->
+    <title>$ID€£ - Outil calcul indemnité licenciement</title>
+  </head>
+  <style>
+    .tooltip .tooltiptext {
+        visibility: hidden;
+        text-align: initial;
+        font-weight: initial;
+        background-color: rgb(228, 228, 105);
+        border-radius: 6px;
+        border: 1px solid black;
+        padding: 5px;
+
+        /* Position the tooltip */
+        position: absolute;
+        z-index: 1;
+    }
+
+    .tooltip:hover .tooltiptext {
+        visibility: visible;
+    }
+
+    table.withBorder, table.withBorder th, table.withBorder td {
+        border: 1px solid black;
+        border-collapse: collapse;
+    }
+  </style>
+  <body>
+    <h1>$ID€£ - Outil calcul indemnité licenciement</h1>
+    <p class="sous-titre">par <a href="mailto:adrien.levasseur@sidel.com">Adrien Levasseur</a></p>
+    <h2>Versions</h2>
+    <p class="versioning">
+        <ul><strong>Bugs/Améliorations à traiter</strong>
+            <li>Principe à valider avant diffusion générale</li>
+            <li>Les règles de calcul de l'ancienneté seront à clarifier, par exemple :
+                <ul>
+                    <li>Chaque période est indépendante des autres pour l'ancienneté, si bien qu'une période d'activité de 11 mois et 27 jours, suivi d'une période de plus de 3 jours mais moins d'un mois compteront comme 11 mois d'ancienneté</li>
+                    <li>l'indemnité légale ne compte pas certaines suspension de contrat, mais les conventions ne semblent pas déduire celles-ci. Par exemple, est-ce qu'une journée de grève retire 1 mois d'ancienneté ?</li>
+                </ul>
+            </li>
+            <li>La gestion de la majoration d'ancienneté des non cadres ayant des périodes d'activités au forfait jour est à clarifier, dans cette version cela est pris en compte pour le calcul d'indemnité de la période majorée mais est-ce vraiment le cas ?</li>
+            <li>Les cotisations sociales et CSG/CRDS ne sont pas comptées (exonéré d'ISR car PSE), pour le moment seule l'indemnité brute est calculée</li>
+        </ul>
+        <ul><strong>V0.4 : Amélioration affichage (12/07/2023)</strong>
+            <li>Colorise les groupe de calculs pertinents à la catégorie d'employé visé (convention/statut cadre)</li>
+            <li>Début de prise en compte des montants soumis à cotisations sociales et CSG/CRDS</li>
+        </ul>
+        <ul><strong>V0.3 : Amélioration affichage (10/07/2023)</strong>
+            <li>N'afficher que les calculs pertinents à la catégorie d'employé visé (convention/statut cadre)</li>
+        </ul>
+        <ul><strong>V0.2 : Correctifs pour les cadres > 50ans (16/06/2023)</strong>
+            <li>Les calculs de majoration/minoration des indemnités pour les cadres/ingénieurs >50ans ne sont pas prises en comptes (problème de portée locale de la variable ageDepart rendue globale)</li>
+        </ul>
+        <ul><strong>V0.1 : Release BE + CSE (16/06/2023)</strong>
+        </ul>
+    </p>
+    <h2>Disclaimer</h2>
+    <p class="disclaimer">
+        <ul>
+            <li>Aucune donnée saisie n'est reçue par/émise sur internet, le fichier source tourne localement sur votre navigateur</li>
+            <li>Je décline toute responsabilité si mes calculs sont erronés</li>
+            <li>Les subventions (formation/reconversion/création...), les pots de vins (primes de reprise d'activité, fin de conflit...) et les congés de reclassement ne sont pas comptés</li>
+            <li class="tooltip">
+                Des informations supplémentaires s'affiche au survol des lignes avec une astérisque*
+                <div class="tooltiptext">Ceci est un exemple d'info-bulle</div>
+            </li>
+            <li>Débuggé sous Google Chrome. Microsoft Edge et Mozilla Firefox semblent être ok aussi mais je ne le garantirai pas.</li>
+        </ul>
+    </p>
+    <h2>Renseignements</h2>
+    <fieldset>
+        <legend>Vos informations personnelles</legend>
+        <table>
+            <tr>
+                <td><label for="dateNaissance"><strong>Date de naissance :</strong></label></td>
+                <td><input type="date" id="dateNaissance" value="1987-11-10"/></td>
+            </tr>
+            <tr>
+                <td  class="tooltip">
+                    <label for="statutEmploye"><strong>Indiquez votre statut d'emploi* :</strong></label>
+                    <div class="tooltiptext">
+                        <strong>Avant 01/01/2024 : </strong><br>
+                        La convention collective est indiquée dans le bulletin de paie en haut à gauche<br>
+                        <strong>A partir du 01/01/2024 : </strong><br>
+                        Point de vue indemnité de licenciement, la nouvelle convention collective harmonise les 2 anciennes tout en reprenant le minimum légal, mais un nouveau système de grille de points détermine les catégories d'employés.<br>
+                        Pour résumer, un non-cadre est classé dans les catégories "A à E", les cadres sont dans les classes "F à I". Typiquement, les ingénieurs pourraient ne plus être considérés comme des cadres.
+                    </div>
+                </td>
+                <td>
+                    <input type="radio" id="non-cadre" name="statutEmploye" value="non-cadre">Non-cadre / catégorie "A à E"</input><br>
+                    <input type="radio" id="cadre" name="statutEmploye" value="cadre" checked="true">Cadre / catégorie "F à I"</input>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label for="salaireReference" class="tooltip">
+                        <strong>Salaire de référence* :</strong>
+                        <div class="tooltiptext">
+                            <strong>IDCC3248 Article 75.3.2</strong><br>
+                            <ol>Le salaire de référence servant au calcul de l'indemnité de licenciement est, selon la formule la plus avantageuse pour le salarié, la moyenne mensuelle de la rémunération brute :
+                                <li>Soit au titre des 12 derniers mois précédant la date à laquelle l'employeur a manifesté la volonté de licencier le salarié, ou, lorsque l'ancienneté du salarié est inférieure à 12 mois, des mois précédant cette même date</li>
+                                <li>Soit au titre des 3 derniers mois précédant la date à laquelle l'employeur a manifesté la volonté de licencier le salarié.</li>
+                            </ol>
+                            Tout élément de rémunération versé au salarié au cours des 12 ou 3 derniers mois visés aux 1° et 2° ci-dessus, à périodicité supérieure à la période de référence concernée, est pris en compte dans la limite d'un montant calculé à due proportion.<br>
+                        </div>
+                    </label>
+                </td>
+                <td><input type="number" id="salaireReference" value="3942.53"/>€</td>
+            </tr>
+            <tr>
+                <td><label for="dateNotification"><strong>Date de notification :</strong></label></td>
+                <td><input type="date" id="dateNotification" value="2023-11-30"/></td>
+            </tr>
+            <tr>
+                <td><label for="dateLicenciement"><strong>Date de licenciement (Fin du préavis) :</strong></label></td>
+                <td><input type="date" id="dateLicenciement" value="2024-02-29"/></td>
+            </tr>
+            <tr>
+                <td>
+                    <label for="exonerationMino60ans" class="tooltip">
+                        <strong>(+60ans) Exempté de minoration liée à la retraite* :</strong>
+                        <div class="tooltiptext">
+                            <strong>IDCC3248 Article 75.3.3 : Majoration et planchers ou minoration de l'indemnité de licenciement des salariés relevant des groupes d'emplois F, G, H et I</strong><br>
+                            <ul>Le montant de l'indemnité de licenciement, calculé conformément à l'article 75.3.1.2 et à l'article 75.3.2 de la présente convention, est minoré :
+                                <li>de 5 % pour les salariés âgés de 61 ans</li>
+                                <li>de 10 % pour les salariés âgés de 62 ans</li>
+                                <li>de 20 % pour les salariés âgés de 63 ans</li>
+                                <li>de 40 % pour les salariés âgés de 64 ans et plus</li>
+                            </ul>
+                            La minoration ne peut aboutir à porter l'indemnité de licenciement à un montant inférieur à celui de l'indemnité légale de licenciement.<br>
+                            La minoration n'est pas applicable si le salarié démontre qu'à la date de rupture du contrat de travail :
+                            <ul>
+                                <li>soit il n'a pas la durée d'assurance requise au sens de l'article L. 351-1 du code de la sécurité sociale pour bénéficier d'une retraite à taux plein</li>
+                                <li>soit l'une des retraites complémentaires auxquelles l'employeur cotise avec lui est liquidée avec un abattement.</li>
+                            </ul>
+                        </div>
+                    </label>
+                </td>
+                <td><input type="checkbox" id="exonerationMino60ans"/></td>
+            </tr>
+        </table>
+        <label><strong>Indiquez vos périodes d'activité de la plus ancienne à la plus récente :</strong></label><br>
+        <table class="withBorder">
+            <caption></caption>
+            <thead>
+                <tr>
+                    <th>Début période</th>
+                    <th class="tooltip">
+                        Temps partiel*
+                        <div class="tooltiptext">
+                            *1 = temps complet, 0.5 = mi-temps,<br>
+                            0 = périodes non prise en compte (suspension de contrat empêchant de compter l'ancienneté)...
+                        </div>
+                    </th>
+                    <th class="tooltip">
+                        Forfait Jour*
+                        <div class="tooltiptext">
+                            *<strong>IDCC3248 Article 73 : </strong><br>
+                            Pour le calcul des indemnités visées à l'article 75.3.1.1 et à l'article 77.3 de la présente convention, l'ancienneté, telle que définie au présent article, acquise par le salarié relevant des groupes d'emplois A à E, au titre des périodes durant lesquelles l'intéressé a été lié par une convention de forfait en jours sur l'année avec la même entreprise, est majorée de 50 %.
+                        </div>
+                    </th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="periodesTable">
+                <tr>
+                    <td><input type="date" class="dateDebut" value="2018-01-02"/></td>
+                    <td><input type="number" class="coefficient" min="0.05" max="1" step="0.05" value="1"/></td>
+                    <td><input type="checkbox" class="forfaitJour" value="forfaitJour" checked/></td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+        <button id="ajouterPeriode">Ajouter une période d'activité</button>
+    </fieldset>
+    <fieldset>
+        <legend>Les conditions de licenciement</legend>
+        <table>
+            <thead>
+                <th></th>
+                <th></th>
+                <th></th>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><label for="partFixe"><strong>Part fixe :</strong></label></td>
+                    <td><input type="number" id="partFixe" value="9000"/></td>
+                    <td>€</td>
+                </tr>
+                <tr>
+                    <td><label for="partVariable"><strong>Part Variable :</strong></label></td>
+                    <td><input type="number" id="partVariable" value="3000"/></td>
+                    <td>€/an</td>
+                </tr>
+                <tr>
+                    <td><label for="supraPlafondMontant"><strong>Plafond (Supra seule) :</strong></label></td>
+                    <td><input type="number" id="supraPlafondMontant" value="85000"/></td>
+                    <td>€</td>
+                </tr>
+                <tr>
+                    <td><label for="plancher"><strong>Plancher (ICL+Supra) :</strong></label></td>
+                    <td><input type="number" id="plancher" value ="25000"/></td>
+                    <td>€</td>
+                </tr>
+                <tr>
+                    <td><label for="plafondMontant"><strong>Plafond (ICL+Supra) :</strong></label></td>
+                    <td><input type="number" id="plafondMontant"/></td>
+                    <td>€</td>
+                </tr>
+                <tr>
+                    <td><label for="plafondMois"><strong>Plafond en mois (ICL+Supra) :</strong></label></td>
+                    <td><input type="number" id="plafondMois"/></td>
+                    <td>mois</td>
+                </tr>
+            </tbody>
+        </table>
+    </fieldset>
+    <button id="calculerIndemnite">Calculer vos indemnités</button>
+    <h2>Calculs</h2>
+    <table class="withBorder">
+        <thead>
+            <tr>
+                <th>Part</th>
+                <th>Sous-part</th>
+                <th>Valeur</th>
+                <th>Unité</th>
+                <th>Commentaire</th>
+            </tr>
+        </thead>
+        <tbody id="calculIndemnite">
+            <tr>
+                <th rowspan="2">Age et ancienneté</th>
+                <td>Age de départ</td>
+                <td id="ageDepart"></td>
+                <td>an(s)</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td class="tooltip">
+                    Ancienneté brute*
+                    <div class="tooltiptext">
+                        Date de licenciement - Date d'arrivée<br>
+                        Il faut au moins 8 mois soit 0.667 années d'ancienneté pour avoir droit à l'indemnité de licenciement
+                    </div>
+                </td>
+                <td id="ancienneteAnnee"></td>
+                <td>an(s)</td>
+                <td></td>
+            </tr>
+            <tr>
+                <th>Salaire de référence</th>
+                <td>Equivalent plein temps</td>
+                <td id="salaireReferencePlein"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <th rowspan="4" id="legale_group">Légale</th>
+                <td class="tooltip">
+                    Ancienneté légale*
+                    <div class="tooltiptext">Déduit les périodes de coefficient nul</div>
+                </td>
+                <td id="ancienneteLegale"></td>
+                <td>an(s)</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>Tranche Inf.10ans</td>
+                <td id="legalInf10ans"></td>
+                <td>€</td>
+                <td>1/4 mois par an</td>
+            </tr>
+            <tr>
+                <td>Tranche Sup.10ans</td>
+                <td id="legalSup10ans"></td>
+                <td>€</td>
+                <td>1/3 mois par an</td>
+            </tr>
+            <tr>
+                <td><strong>Total</strong></td>
+                <td id="legalTotal"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC0943_nonCadre">
+                <th rowspan="5" id="0943_nonCadre_group">Conventionnelle non-cadre<br>IDCC0943 &lt;01/01/2024</th>
+                <td>
+                    Ancienneté conventionnelle non cadre
+                </td>
+                <td id="0943_ancienneteConvNonCadre"></td>
+                <td>an(s)</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC0943_nonCadre">
+                <td>Tranche Sup.2ans et Inf.5ans</td>
+                <td id="0943_nonCadreInf5ans"> </td>
+                <td>€</td>
+                <td>1/10 mois par an</td>
+            </tr>
+            <tr class="IDCC0943_nonCadre">
+                <td>Tranche Sup.5ans et Inf.15ans</td>
+                <td id="0943_nonCadreInf15ans"> </td>
+                <td>€</td>
+                <td>1/5 mois par an</td>
+            </tr>
+            <tr class="IDCC0943_nonCadre">
+                <td>Tranche Sup.15ans</td>
+                <td id="0943_nonCadreSup15ans"> </td>
+                <td>€</td>
+                <td>3/10 mois par an</td>
+            </tr>
+            <tr class="IDCC0943_nonCadre">
+                <td><strong>Total</strong></td>
+                <td id="0943_nonCadreTotal"> </td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <th rowspan="8" id="0650_cadre_group">Conventionnelle cadre<br>IDCC0650 &lt;01/01/2024</th>
+                <td class="tooltip">
+                    Ancienneté conventionnelle cadre*
+                    <div class="tooltiptext">
+                        *<strong>IDCC3248 Article 3: Définition de l'ancienneté</strong><br>
+                        La définition de l'ancienneté visée au présent article s'applique aux droits et obligations liés à l'ancienneté, prévus par les présentes dispositions conventionnelles.<br>
+                        L'ancienneté du salarié débute à partir de la date d'embauche au titre du contrat de travail en cours. En cas de mutation concertée, l'ancienneté débute à partir de la date d'embauche dans la première entreprise.<br>
+                        <ul>En outre, sont prises en compte :
+                            <li>la durée des contrats de travail antérieurs conclus avec la même entreprise, y compris les contrats de chantier ou d'opération</li>
+                            <li>la durée des missions accomplies par le salarié dans l'entreprise avant son recrutement par cette dernière au titre d'un contrat de travail temporaire conclu en application de l'article L. 1251-1 du code du travail ou d'un contrat de travail à durée indéterminée intérimaire conclu en application de l'article L. 1251-58-1 du code du travail</li>
+                            <li>les périodes de suspension du contrat de travail.</li>
+                        </ul>
+                    </div>
+                </td>
+                <td id="0650_ancienneteConvCadre"></td>
+                <td>an(s)</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <td>Tranche Inf.7ans</td>
+                <td id="0650_cadreInf7ans"></td>
+                <td>€</td>
+                <td>1/5 mois par an</td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <td>Tranche Sup.7ans</td>
+                <td id="0650_cadreSup7ans"></td>
+                <td>€</td>
+                <td>3/5 mois par an</td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <td>Base</td>
+                <td id="0650_cadreBase"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <td>Majoration</td>
+                <td id="0650_cadreMajo"></td>
+                <td>€</td>
+                <td>20/30% 50-55/55-60ans anc.>5ans,<br> au moins 3/6 mois du salaire de référence</td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <td>Plafond 18mois</td>
+                <td id="0650_cadrePlafond"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <td class="tooltip">
+                    Minoration*
+                    <div class="tooltiptext">
+                        *<strong>IDCC3248 Article 75.3.3 :</strong><br>
+                        <ul>La minoration n'est pas applicable si le salarié démontre qu'à la date de rupture du contrat de travail :
+                            <li>soit il n'a pas la durée d'assurance requise au sens de l'article L. 351-1 du code de la sécurité sociale pour bénéficier d'une retraite à taux plein ;</li>
+                            <li>soit l'une des retraites complémentaires auxquelles l'employeur cotise avec lui est liquidée avec un abattement.</li>
+                        </ul>
+                    </div>
+                </td>
+                <td id="0650_cadreMino"></td>
+                <td>€</td>
+                <td>5/10/20/40% 60/61/62/63/64ans</td>
+            </tr>
+            <tr class="IDCC0650_cadre">
+                <td><strong>Total</strong></td>
+                <td id="0650_cadreTotal"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC3248_nonCadre">
+                <th rowspan="4" id="3248_nonCadre_group">Conventionnelle non-cadre<br>IDCC3248 >=01/01/2024</th>
+                <td class="tooltip">
+                    Ancienneté conventionnelle non cadre*
+                    <div class="tooltiptext">
+                        *<strong>IDCC3248 Article 3: Définition de l'ancienneté</strong><br>
+                        La définition de l'ancienneté visée au présent article s'applique aux droits et obligations liés à l'ancienneté, prévus par les présentes dispositions conventionnelles.<br>
+                        L'ancienneté du salarié débute à partir de la date d'embauche au titre du contrat de travail en cours. En cas de mutation concertée, l'ancienneté débute à partir de la date d'embauche dans la première entreprise.<br>
+                        <ul>En outre, sont prises en compte :
+                            <li>la durée des contrats de travail antérieurs conclus avec la même entreprise, y compris les contrats de chantier ou d'opération</li>
+                            <li>la durée des missions accomplies par le salarié dans l'entreprise avant son recrutement par cette dernière au titre d'un contrat de travail temporaire conclu en application de l'article L. 1251-1 du code du travail ou d'un contrat de travail à durée indéterminée intérimaire conclu en application de l'article L. 1251-58-1 du code du travail</li>
+                            <li>les périodes de suspension du contrat de travail.</li>
+                        </ul>
+                        *<strong>IDCC3248 Article 73 : </strong><br>
+                        Pour le calcul des indemnités visées à l'article 75.3.1.1 et à l'article 77.3 de la présente convention, l'ancienneté, telle que définie au présent article, acquise par le salarié relevant des groupes d'emplois A à E, au titre des périodes durant lesquelles l'intéressé a été lié par une convention de forfait en jours sur l'année avec la même entreprise, est majorée de 50 %.
+                    </div>
+                </td>
+                <td id="3248_ancienneteConvNonCadre"></td>
+                <td>an(s)</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC3248_nonCadre">
+                <td>Tranche Inf.10ans</td>
+                <td id="3248_nonCadreInf10ans"> </td>
+                <td>€</td>
+                <td>1/4 mois par an</td>
+            </tr>
+            <tr class="IDCC3248_nonCadre">
+                <td>Tranche Sup.10ans</td>
+                <td id="3248_nonCadreSup10ans"> </td>
+                <td>€</td>
+                <td>1/3 mois par an</td>
+            </tr>
+            <tr class="IDCC3248_nonCadre">
+                <td><strong>Total</strong></td>
+                <td id="3248_nonCadreTotal"> </td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <th rowspan="9" id="3248_cadre_group">Conventionnelle cadre<br>IDCC3248 >=01/01/2024</th>
+                <td class="tooltip">
+                    Ancienneté conventionnelle cadre*
+                    <div class="tooltiptext">
+                        *<strong>IDCC3248 Article 3: Définition de l'ancienneté</strong><br>
+                        La définition de l'ancienneté visée au présent article s'applique aux droits et obligations liés à l'ancienneté, prévus par les présentes dispositions conventionnelles.<br>
+                        L'ancienneté du salarié débute à partir de la date d'embauche au titre du contrat de travail en cours. En cas de mutation concertée, l'ancienneté débute à partir de la date d'embauche dans la première entreprise.<br>
+                        <ul>En outre, sont prises en compte :
+                            <li>la durée des contrats de travail antérieurs conclus avec la même entreprise, y compris les contrats de chantier ou d'opération</li>
+                            <li>la durée des missions accomplies par le salarié dans l'entreprise avant son recrutement par cette dernière au titre d'un contrat de travail temporaire conclu en application de l'article L. 1251-1 du code du travail ou d'un contrat de travail à durée indéterminée intérimaire conclu en application de l'article L. 1251-58-1 du code du travail</li>
+                            <li>les périodes de suspension du contrat de travail.</li>
+                        </ul>
+                    </div>
+                </td>
+                <td id="3248_ancienneteConvCadre"></td>
+                <td>an(s)</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td>Anc.&lt; 8ans</td>
+                <td id="3248_cadreInf8ans"></td>
+                <td>€</td>
+                <td>1/4 mois par an</td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td>Tranche Inf.7ans (anc.>= 8ans)</td>
+                <td id="3248_cadreInf7ans"></td>
+                <td>€</td>
+                <td>1/5 mois par an</td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td>Tranche Sup.7ans (anc.>= 8ans)</td>
+                <td id="3248_cadreSup7ans"></td>
+                <td>€</td>
+                <td>3/5 mois par an</td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td>Base</td>
+                <td id="3248_cadreBase"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td>Majoration</td>
+                <td id="3248_cadreMajo"></td>
+                <td>€</td>
+                <td>20/30% 50-55/55-60ans anc.>5ans,<br> au moins 3/6 mois du salaire de référence</td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td>Plafond 18mois</td>
+                <td id="3248_cadrePlafond"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td class="tooltip">
+                    Minoration*
+                    <div class="tooltiptext">
+                        *<strong>IDCC3248 Article 75.3.3 :</strong><br>
+                        <ul>La minoration n'est pas applicable si le salarié démontre qu'à la date de rupture du contrat de travail :
+                            <li>soit il n'a pas la durée d'assurance requise au sens de l'article L. 351-1 du code de la sécurité sociale pour bénéficier d'une retraite à taux plein ;</li>
+                            <li>soit l'une des retraites complémentaires auxquelles l'employeur cotise avec lui est liquidée avec un abattement.</li>
+                        </ul>
+                    </div>
+                </td>
+                <td id="3248_cadreMino"></td>
+                <td>€</td>
+                <td>5/10/20/40% 60/61/62/63/64ans</td>
+            </tr>
+            <tr class="IDCC3248_cadre">
+                <td><strong>Total</strong></td>
+                <td id="3248_cadreTotal"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <th rowspan="2">Supra-légale</th>
+                <td>Calcul Brut</td>
+                <td id="supraBrut"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>Plafond fixe</td>
+                <td id="supraPlafond"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <th rowspan="7">TOTAL</th>
+                <td class="tooltip">
+                    ICL*
+                    <div class="tooltiptext">Entre le légal et la convention applicable à la date de notification du licenciement, la meilleure indemnité est prise en compte</div>
+                </td>
+                <td id="legale"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>ICL + Supra brut</td>
+                <td id="iclSupraBrut"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>ICL + Supra Plancher fixe</td>
+                <td id="iclSupraPlancher"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>ICL + Supra Plafond mois</td>
+                <td id="iclSupraPlafondMois"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>ICL + Supra Plafond fixe</td>
+                <td id="iclSupraPlafondMontant"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>Ancienneté mini 8 mois</td>
+                <td id="eligibleAncienneteMinimale"></td>
+                <td>€</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td class="tooltip">
+                    <strong>Total Brut*</strong>
+                    <div class="tooltiptext">
+                        Dans le cadre d'un PSE, l'indemnité de licenciement n'est pas imposable sur le revenu<br>
+                        Par contre elle est soumise aux cotisations sociales + CSG/CRDS
+                    </div>
+                </td>
+                <td id="iclSupraTotal"></td>
+                <td>€</td>
+                <td>Ce montant n'est pas imposable</td>
+            </tr>
+            <tr>
+                <th rowspan="4">Cotisations</th>
+                <td class="tooltip">
+                    Montant soumis à<br>cotisations sociales*
+                    <div class="tooltiptext">
+                        <strong>F987 :</strong> La fraction de l'indemnité de licenciement exonérée d'impôt sur le revenu est également exonérée de cotisations sociales,<br>
+                        dans la limite de 87 984 €.<br>
+                        Si l'indemnité de licenciement versée est supérieure à 439 920 €, elle est soumise à cotisations intégralement. Aucune exonération n'est applicable.
+                    </div>
+                </td>
+                <td id="cotisationsSociales"></td>
+                <td>€</td>
+                <td>Exonération jusque 87984€<br>Si > 439920€ entièrement soumise</td>
+            </tr>
+            <tr>
+                <td class="tooltip">
+                    Montant soumis à<br>CSG/CRDS*
+                    <div class="tooltiptext">
+                        <strong>F987 :</strong> L'indemnité de licenciement est exonérée de CSG (Contribution sociale généralisée) et CRDS (Contribution pour le remboursement de la dette sociale) selon la plus petite des 2 limites suivantes :
+                        <ul>
+                            <li>Montant de l'indemnité légale ou conventionnelle de licenciement dû au salarié licencié</li>
+                            <li>Montant de l'indemnité exonéré de cotisations sociales</li>
+                        </ul>
+                        dans la limite de 87 984 €.<br>
+                        Si l'indemnité de licenciement versée est supérieure à 439 920 €, elle est soumise à cotisations intégralement. Aucune exonération n'est applicable.
+                    </div>
+                </td>
+                <td id="CSG_CRDS"></td>
+                <td>€</td>
+                <td>Exonération du plus petit entre l'ICL ou<br> du montant de lindemnité exonéré de cotisations sociales<br>Si > 439920€ entièrement soumise</td>
+            </tr>
+            <tr>
+                <td>CSG</td>
+                <td id="montantCSG"></td>
+                <td>€</td>
+                <td>9.2% du montant soumis</td>
+            </tr>
+            <tr>
+                <td>CRDS</td>
+                <td id="montantCRDS"></td>
+                <td>€</td>
+                <td>0.5% du montant soumis</td>
+            </tr>
+        </tbody>
+    </table>
+    <h2>Références</h2>
+    <ul>
+        <li><a href="https://www.service-public.fr/particuliers/vosdroits/F987" target="_blank" title="service-public.fr">F987 - Indemnité de licenciement du salarié en CDI</a></li>
+        <li><a href="https://www.service-public.fr/particuliers/vosdroits/F371" target="_blank" title="service-public.fr">F371 - Comment calculer l'ancienneté pour le montant de l'indemnité de licenciement ?</a></li>
+        <li><a href="https://www.legifrance.gouv.fr/conv_coll/article/KALIARTI000023173732?idConteneur=KALICONT000005635842&origin=list#KALIARTI000023173732" target="_blank" title="Convention collective nationale des ingénieurs et cadres de la métallurgie du 13 mars 1972">(&lt; 1er janvier 2024)Art. 29 de la convention collective des cadres et ingénieurs de la métallurgie</a></li>
+        <li><a href="https://uimm.lafabriquedelavenir.fr/wp-content/uploads/2016/11/U1401_CC_1997-06-30_actuelle_2015.pdf" target="_blank" title="UIMM - CONVENTION COLLECTIVE DES INDUSTRIES METALLURGIQUES MECANIQUES ET CONNEXES du Département du CALVADOS">(&lt; 1er janvier 2024)Art. 49 de la CONVENTION COLLECTIVE DES INDUSTRIES METALLURGIQUES MECANIQUES ET CONNEXES du Département du CALVADOS</a></li>
+        <li><a href="https://www.legifrance.gouv.fr/conv_coll/id/KALISCTA000046314318/?idConteneur=KALICONT000046993250" target="_blank" title="Convention collective nationale de la métallurgie du 7 février 2022">(>= 1er janvier 2024) Chapitre 3 Rupture du contrat de travail (Art. 73 à 79.4)</a></li>
+    </ul>
+  </body>
+</html>
+<script>
+    /*Gérer le tableau des périodes*/
+    /**Gérer l'ajout de période dans le tableau**/
+    function ajouterLignePeriode(){
+        var tableau = document.getElementById("periodesTable");
+        var newRow = tableau.insertRow(-1); // Insérer une ligne à la fin du tableau
+
+        let cell = 0;
+        var cell1 = newRow.insertCell(cell++); // Insérer une cellule dans la nouvelle ligne
+        var cell2 = newRow.insertCell(cell++);
+        var cell3 = newRow.insertCell(cell++);
+        var cell4 = newRow.insertCell(cell++);
+
+        cell1.innerHTML = '<input type="date" class="dateDebut"/>';
+        cell2.innerHTML = '<input type="number" class="coefficient" min="0.05" max="1" step="0.05" value="1"/>';
+        cell3.innerHTML = '<input type="checkbox" class="forfaitJour" value="forfaitJour"/>';
+        cell4.innerHTML = '<button class="supprimerPeriode">Suppr.</button>';
+
+        var supprimerBtn = cell4.querySelector(".supprimerPeriode");
+        supprimerBtn.addEventListener("click", function() {
+            supprimerLigne(this);
+        });
+    }
+
+    document.getElementById("ajouterPeriode").addEventListener("click", ajouterLignePeriode, false);
+
+    /**Gérer la suppression de ligne**/
+    function supprimerLigne(button) {
+        var row = button.parentNode.parentNode;
+        row.parentNode.removeChild(row);
+    }
+
+    /*Calculer les indemnités*/
+    calculIndemniteTableau = document.getElementById("calculIndemnite");
+    calculIndemniteTableau.hidden = true;
+
+    /**Déclaration de variables globales**/
+    /***Entrées concernant les données personnelles***/
+    var dateNaissance = "";
+    var statutCadre = false;
+    var salaireReference = 0;
+    var dateNotification = "";
+    var dateLicenciement = "";
+    var exonerationMino60ans = false;  //exonerationMino60ans est true si pas de minoration pour les indemnités conventionnelles des cadre >60ans
+    /***Variables concernant les données personnelles***/
+    var periodesArray = []; //Récupère sous forme de tableau d'objet les informations du tableau de période saisi par l'utilisateur
+    var salaireReferencePlein = 0;
+    var ageDepart = 0;
+    
+    /***Entrées concernant le calcul de l'indemnité supra-légale***/
+    var partFixe = 0;
+    var partVariable = 0;
+    var supraPlafondMontant = 0;
+    var ancienneteAnnee = 0;
+    
+    /***Entrées concernant le calcul des limites d'indemnité de licenciement***/
+    var plancher = 0;
+    var plafondMontant = 0;
+    var plafondMois = 0;
+    var debutPeriodeArray;
+    var coefficientArray;
+    var forfaitJourArray;
+    
+    /**Répartir une période d'activité sur plusieurs tranches d'ancienneté**/
+    function repartirPeriodeTranches(dureePeriodeMois, tranches, cumulAncienneteMois, coefficentPeriode){
+        //let indemnitePeriode = 0;
+        let repartitionPeriodeTranche = [];
+
+        for(let i=0; i < tranches.length; i++){
+            let tranche = tranches[i];
+            let dureeDansTranche = 0;
+            let premierMoisDansTranche = 0;
+            let dernierMoisDansTranche = 0;
+            if(cumulAncienneteMois + dureePeriodeMois < tranche.ancienneteMois){ //periode entièrement en-dessous de la tranche
+                //break; //On sort complètement du for car inutile de checker les tranches suivantes
+                //console.log('on break', cumulAncienneteMois, tranches[i+1].ancienneteMois);
+            }
+            
+            else if(i < tranches.length - 1){
+                if(cumulAncienneteMois > tranches[i+1].ancienneteMois){ //periode entièrement au-dessus de la tranche
+                    //console.log('tranche intermédiaire passée:', i);
+                    //continue;  //On passe à la prochaine tranche
+                }   //A partir de là, la période se trouve au moins en partie dans la tranche
+                else{
+                    premierMoisDansTranche = cumulAncienneteMois > tranche.ancienneteMois ? cumulAncienneteMois : tranche.ancienneteMois;
+                    dernierMoisDansTranche = cumulAncienneteMois + dureePeriodeMois > tranches[i+1].ancienneteMois ? tranches[i+1].ancienneteMois : cumulAncienneteMois + dureePeriodeMois;
+                    dureeDansTranche = dernierMoisDansTranche - premierMoisDansTranche;
+                    //console.log('tranche intermédiaire calculée:', i);
+                }
+                
+            }
+            else{   //Dernière tranche évaluée
+                premierMoisDansTranche = cumulAncienneteMois > tranche.ancienneteMois ? cumulAncienneteMois : tranche.ancienneteMois;
+                dernierMoisDansTranche = cumulAncienneteMois + dureePeriodeMois;
+                dureeDansTranche = dernierMoisDansTranche - premierMoisDansTranche;
+                //console.log('dernière tranche calculée:', i);
+            }
+
+            repartitionPeriodeTranche.push({
+                tranche: i,
+                mois: dureeDansTranche,
+                taux: tranche.taux,
+                indemniteTranche: tranche.taux * dureeDansTranche * salaireReferencePlein / 12 * coefficentPeriode
+            });
+        }
+
+        //console.log(repartitionPeriodeTranche);
+        return repartitionPeriodeTranche;
+    }
+
+    function calculerIndemnitePeriode(repartitionPeriode){
+        let indemnitePeriode = 0;
+        //console.log('Tranche ; Taux ; DuréeMois ; €tranche ; €cumul' )
+        repartitionPeriode.forEach(tranche => {
+            indemnitePeriode+= tranche.indemniteTranche;
+            //console.log(tranche.tranche, tranche.taux, tranche.mois, tranche.indemniteTranche, indemnitePeriode)
+            
+        });
+
+        return indemnitePeriode;
+    }
+
+    /**Calculer une indemnité sur x tranches**/
+    function calculerIndemniteTranches(compterSuspension, tranches, majoForfaitJour){
+        //tranches est un tableau d'objets ayant les membres .ancienneteMois .taux
+        let dateFinPeriode;
+        let dureePeriode = 0;
+        let cumulAnciennete = 0;
+        let indemnitePeriode = 0;
+        let repartitionPeriode = [];
+        for(let i = 0; i < periodesArray.length ; i++){
+            //date de la fin de période : soit date début prochaine période, soit date de licenciement
+            dateFinPeriode = i < periodesArray.length - 1 ? periodesArray[i+1].dateDebut : dateLicenciement;
+            dureePeriode = calculerDifferenceMois(periodesArray[i].dateDebut,dateFinPeriode) * (majoForfaitJour && periodesArray[i].forfaitJour ? 1.5 : 1);
+            
+            if(periodesArray[i].coefficent == 0 && !compterSuspension){   //La période ne doit pas être une suspension de contrat sauf si elle sont comptées
+                //console.log(i, 'période non comptabilisée car suspension de contrat');
+                continue;   //continue passe à la prochaine itération de boucle
+            }
+
+            if(dureePeriode < 1){   //La période ne doit pas être une suspension de contrat ni < 1 mois complet
+                //console.log(i, 'période non comptabilisée car mois incomplet');
+                continue;   //continue passe à la prochaine itération de boucle
+            }
+
+            repartitionPeriode.push(repartirPeriodeTranches(dureePeriode, tranches, cumulAnciennete, periodesArray[i].coefficent));
+            indemnitePeriode += calculerIndemnitePeriode(repartitionPeriode[i]);
+            //console.log('repartitionPeriode[', i, ']', repartitionPeriode[i]);
+            cumulAnciennete += dureePeriode;
+
+            //console.log(i,' ; Debut ', periodesArray[i].dateDebut, ' ; Fin', dateFinPeriode, ' ; dureePeriode', dureePeriode, 'indemnitePeriode', indemnitePeriode, ' ; cumulAnciennete', cumulAnciennete);
+        }
+
+        let indemnite = {
+                cumulAnciennete : cumulAnciennete,
+                detailPeriode: repartitionPeriode,
+                indemniteTotal: indemnitePeriode
+        };
+
+        return indemnite;
+    }
+
+    /**Calculer les majoration/minoration des indemnités conventionnelle cadre selon l'age et l'ancienneté**/
+    function calculerMajoMinoCadre(indemniteCadreBrute, IDCC){
+        /*Beaucoup de calculs liés à l'âge de départ de l'employé :*/
+        let cadreMajo = indemniteCadreBrute;
+        /* Majoration lié à l'âge */
+        //- >=50ans et <55ans avec >=5ans d'ancienneté majoration de 20% sans pouvoir être <3mois
+        //- >=55ans et <60ans avec >=5ans d'ancienneté majoration de 30% sans pouvoir être <6mois*/
+        console.log('majomino ', IDCC, cadreMajo, ageDepart, ancienneteAnnee);
+        if(ageDepart >= 50 && ageDepart < 55 && ancienneteAnnee >= 5){
+            cadreMajo = cadreMajo * 1.2;
+            cadreMajo = cadreMajo < 3 * salaireReference ? 3 * salaireReference : cadreMajo;
+        }
+        else if(ageDepart >= 55 && ageDepart < 60 && ancienneteAnnee >= 5){
+            cadreMajo = cadreMajo * 1.3;
+            cadreMajo = cadreMajo < 6 * salaireReference ? 6 * salaireReference : cadreMajo;
+        }
+        document.getElementById(IDCC + "_cadreMajo").innerText = cadreMajo.toFixed(2);
+
+        // Limitation à 18 mois de traitement maximum
+        let cadrePlafondMois = 18;
+        let cadrePlafond = cadreMajo > cadrePlafondMois * salaireReference ? cadrePlafondMois * salaireReference : cadreMajo;
+        document.getElementById(IDCC + "_cadrePlafond").innerText = cadrePlafond.toFixed(2);
+        
+        //Minoration 5% si 61ans, 10% si 62ans, 20% si 63ans, 40% si 64ans
+        let cadreMino = cadrePlafond;
+        if(exonerationMino60ans){
+
+        }
+        else if(ageDepart > 64){
+            cadreMino = cadreMino * 0.6;
+        }
+        else if(ageDepart > 63){
+            cadreMino = cadreMino * 0.8;
+        }
+        else if(ageDepart > 62){
+            cadreMino = cadreMino * 0.9;
+        }
+        else if(ageDepart > 61){
+            cadreMino = cadreMino * 0.95;
+        }
+
+        document.getElementById(IDCC + "_cadreMino").innerText = cadreMino.toFixed(2);
+
+        let cadreTotal = cadreMino;
+        document.getElementById(IDCC + "_cadreTotal").innerText = cadreTotal.toFixed(2);
+
+        return cadreTotal;
+    }
+
+    /**Calcule l'indemnité supra-légale**/
+    function calculerIndemniteSupra(){
+        //Indemnité supra-légale
+        let supraBrut = partFixe + partVariable * ancienneteAnnee;
+        document.getElementById("supraBrut").innerText = supraBrut.toFixed(2);
+
+        let supraBrutPlafonne = supraBrut > supraPlafondMontant ? supraPlafondMontant : supraBrut;
+        document.getElementById("supraPlafond").innerText = supraBrutPlafonne.toFixed(2);
+
+        return supraBrutPlafonne;
+    }
+
+    /**Calculer l'indemnité totale**/
+    function calculerIndemnite(){
+        /*Récupérer les données saisies*/
+        //Statut cadre, salaire de référence, date de licenciement...
+        dateNaissance = document.getElementById("dateNaissance").value;
+        statutCadre = document.getElementsByName("statutEmploye")[1].checked;
+        salaireReference = parseInt(document.getElementById("salaireReference").value);
+        dateLicenciement = document.getElementById("dateLicenciement").value;
+        dateNotification = document.getElementById("dateNotification").value;
+        exonerationMino60ans = document.getElementById("exonerationMino60ans").checked;
+
+        //Tableau des périodes
+        debutPeriodeArray = document.getElementsByClassName("dateDebut");
+        coefficientArray = document.getElementsByClassName("coefficient");
+        forfaitJourArray = document.getElementsByClassName("forfaitJour");
+        periodesArray = [];
+        for(i=0; i < debutPeriodeArray.length; i++){
+            let periode = {
+                dateDebut: debutPeriodeArray[i].value,
+                coefficent: parseFloat(coefficientArray[i].value),
+                forfaitJour: forfaitJourArray[i].checked
+            };
+            periodesArray.push(periode);
+        }
+
+        salaireReferencePlein = salaireReference / periodesArray[periodesArray.length-1].coefficent;
+        //console.log(salaireReferencePlein);
+        document.getElementById("salaireReferencePlein").innerText = salaireReferencePlein.toFixed(2);
+
+        //Part fixe, variable, plancher, plafonds
+        partFixe = parseInt(document.getElementById("partFixe").value);
+        partVariable = parseInt(document.getElementById("partVariable").value);
+        supraPlafondMontant = parseInt(document.getElementById("supraPlafondMontant").value);
+        plancher = parseInt(document.getElementById("plancher").value);
+        plafondMontant = parseInt(document.getElementById("plafondMontant").value);
+        plafondMois = parseInt(document.getElementById("plafondMois").value);
+
+        //*Calcul sur les données récupérées*/
+        //Ancienneté en mois/ ans et age de départ
+        let ancienneteMois = calculerDifferenceMois(debutPeriodeArray[0].value, dateLicenciement);
+        ancienneteAnnee = ancienneteMois / 12;
+        document.getElementById("ancienneteAnnee").innerText = ancienneteAnnee.toFixed(2);
+        
+        
+        let ancienneteMoisNotification = calculerDifferenceMois(debutPeriodeArray[0].value, dateNotification);
+        ancienneteAnneeNotification = ancienneteMoisNotification / 12;
+
+        ageDepart = calculerDifferenceMois(dateNaissance, dateLicenciement) / 12;
+        document.getElementById("ageDepart").innerText = ageDepart.toFixed(2);
+
+        /*Indemnité telle que dans le code du travail*/
+        //- Les suspensions de contrat ne sont pas comptabilisées dans l'ancienneté
+        //- Le seuil d'ancienneté pour passer la tranche est de 10ans soit 120 mois
+        //- 1/4 de mois de salaire par année d'ancienneté jusqu'à 10 ans
+        //- 1/3 de mois de salaire par année d'ancienneté après 10 ans
+        //- Il n'y a pas majoration de 50% d'ancienneté sur les périodes en forfait jours des non-cadres
+        let tranchesIndemniteLegale = [
+            {ancienneteMois:0, taux:1/4},
+            {ancienneteMois:10 * 12, taux:1/3}
+        ]
+        let indemniteLegale = calculerIndemniteTranches(false, tranchesIndemniteLegale, false);
+        console.log('indemniteLegale', indemniteLegale);
+        //console.log(indemniteLegale.detailPeriode[0][0].indemniteTranche);
+
+        document.getElementById("ancienneteLegale").innerText = (indemniteLegale.cumulAnciennete / 12).toFixed(2);
+
+        let legalInf10ans = 0;
+        indemniteLegale.detailPeriode.forEach(periode => legalInf10ans+= periode[0].indemniteTranche);
+        document.getElementById("legalInf10ans").innerText = legalInf10ans.toFixed(2);
+        
+        let legalSup10ans = 0;
+        indemniteLegale.detailPeriode.forEach(periode => legalSup10ans+= periode[1].indemniteTranche);
+        document.getElementById("legalSup10ans").innerText = legalSup10ans.toFixed(2);
+
+        document.getElementById("legalTotal").innerText = indemniteLegale.indemniteTotal.toFixed(2);
+        
+        let legalTotal = indemniteLegale.indemniteTotal;  //Pour la suite des calculs
+        
+        /*Indemnité telle que dans le convention de la métallurgie pour les non-cadre IDCC0943*/
+        //- Les suspensions de contrat sont comptabilisées dans l'ancienneté
+        //- 1/10 (10%) de mois de salaire par année d'ancienneté de 2 à 5ans
+        //- 1/5 (20%) de mois de salaire par année d'ancienneté de 5 à 15ans
+        //- 3/10 (30%) de mois de salaire par année d'ancienneté à partir de 15ans
+        //- Pas de majoration de 50% d'ancienneté sur les périodes en forfait jours des non-cadres
+        let _0943_tranchesIndemniteNonCadreTotal = [
+            {ancienneteMois:0, taux:0},
+            {ancienneteMois:2 * 12, taux:1/10},
+            {ancienneteMois:5 * 12, taux:1/5},
+            {ancienneteMois:15 * 12, taux:3/10}
+        ]
+        let _0943_indemniteNonCadreTotal = calculerIndemniteTranches(true, _0943_tranchesIndemniteNonCadreTotal, false);
+        console.log('_0943_indemniteNonCadreTotal', _0943_indemniteNonCadreTotal);
+        
+        document.getElementById("0943_ancienneteConvNonCadre").innerText = (_0943_indemniteNonCadreTotal.cumulAnciennete / 12).toFixed(2);
+
+        let _0943_nonCadreInf5ans = 0;
+        _0943_indemniteNonCadreTotal.detailPeriode.forEach(periode => _0943_nonCadreInf5ans+= periode[1].indemniteTranche);
+        document.getElementById("0943_nonCadreInf5ans").innerText = _0943_nonCadreInf5ans.toFixed(2);
+
+        let _0943_nonCadreInf15ans = 0;
+        _0943_indemniteNonCadreTotal.detailPeriode.forEach(periode => _0943_nonCadreInf15ans+= periode[2].indemniteTranche);
+        document.getElementById("0943_nonCadreInf15ans").innerText = _0943_nonCadreInf15ans.toFixed(2);
+
+        let _0943_nonCadreSup15ans = 0;
+        _0943_indemniteNonCadreTotal.detailPeriode.forEach(periode => _0943_nonCadreSup15ans+= periode[3].indemniteTranche);
+        document.getElementById("0943_nonCadreSup15ans").innerText = _0943_nonCadreSup15ans.toFixed(2);
+
+        document.getElementById("0943_nonCadreTotal").innerText = _0943_indemniteNonCadreTotal.indemniteTotal.toFixed(2);
+        
+        let _0943_nonCadreTotal = _0943_indemniteNonCadreTotal.indemniteTotal;  //Pour la suite des calculs
+        
+        /*Indemnité telle que dans le convention de la métallurgie pour les cadres IDCC0650*/
+        //- Les suspensions de contrat sont comptabilisées dans l'ancienneté
+        //- 1/5 de mois de salaire par année d'ancienneté jusqu'à 7 ans
+        //- 3/5 de mois de salaire par année d'ancienneté après 7 ans
+        //- Pas de majoration de 50% d'ancienneté sur les périodes en forfait jours des non-cadres
+        let _0650_tranchesIndemniteCadreBrute = [
+            {ancienneteMois:0, taux:1/5},
+            {ancienneteMois:7 * 12, taux:3/5}
+        ]
+        let _0650_indemniteCadreBrute = calculerIndemniteTranches(true, _0650_tranchesIndemniteCadreBrute, false);
+        console.log('_0650_indemniteCadreBrute', _0650_indemniteCadreBrute);
+        
+        let _0650_cadreBase = _0650_indemniteCadreBrute;
+        document.getElementById("0650_ancienneteConvCadre").innerText = (_0650_cadreBase.cumulAnciennete / 12).toFixed(2);
+
+        let _0650_cadreInf7ans = 0;
+        _0650_cadreBase.detailPeriode.forEach(periode => _0650_cadreInf7ans+= periode[0].indemniteTranche);
+        document.getElementById("0650_cadreInf7ans").innerText = _0650_cadreInf7ans.toFixed(2);
+
+        let _0650_cadreSup7ans = 0;
+        _0650_cadreBase.detailPeriode.forEach(periode => _0650_cadreSup7ans+= periode[1].indemniteTranche);
+        document.getElementById("0650_cadreSup7ans").innerText = _0650_cadreSup7ans.toFixed(2);
+
+        document.getElementById("0650_cadreBase").innerText = _0650_cadreBase.indemniteTotal.toFixed(2);
+        
+        //Majoration et minoration indemnité suivant l'âge et l'ancienneté
+        let _0650_cadreTotal = calculerMajoMinoCadre(_0650_cadreBase.indemniteTotal, "0650");
+
+        /*Indemnité telle que dans le convention de la métallurgie pour les non-cadre IDCC3248*/
+        //- Les suspensions de contrat sont comptabilisées dans l'ancienneté
+        //- 1/4 de mois de salaire par année d'ancienneté jusqu'à 10 ans
+        //- 1/3 de mois de salaire par année d'ancienneté après 10 ans
+        //- Il y a majoration de 50% d'ancienneté sur les périodes en forfait jours des non-cadres
+        let tranchesIndemniteNonCadreTotal = [
+            {ancienneteMois:0, taux:1/4},
+            {ancienneteMois:10 * 12, taux:1/3}
+        ]
+        let indemniteNonCadreTotal = calculerIndemniteTranches(true, tranchesIndemniteNonCadreTotal, true);
+        console.log('indemniteNonCadreTotal', indemniteNonCadreTotal);
+        
+        document.getElementById("3248_ancienneteConvNonCadre").innerText = (indemniteNonCadreTotal.cumulAnciennete / 12).toFixed(2);
+
+        let _3248_nonCadreInf10ans = 0;
+        indemniteNonCadreTotal.detailPeriode.forEach(periode => _3248_nonCadreInf10ans+= periode[0].indemniteTranche);
+        document.getElementById("3248_nonCadreInf10ans").innerText = _3248_nonCadreInf10ans.toFixed(2);
+
+        let _3248_nonCadreSup10ans = 0;
+        indemniteNonCadreTotal.detailPeriode.forEach(periode => _3248_nonCadreSup10ans+= periode[1].indemniteTranche);
+        document.getElementById("3248_nonCadreSup10ans").innerText = _3248_nonCadreSup10ans.toFixed(2);
+
+        document.getElementById("3248_nonCadreTotal").innerText = indemniteNonCadreTotal.indemniteTotal.toFixed(2);
+        
+        let nonCadreTotal = indemniteNonCadreTotal.indemniteTotal;  //Pour la suite des calculs
+        
+        /*Indemnité telle que dans le convention de la métallurgie pour les cadres IDCC3248*/
+        //Cadre < 8 ans
+        //- Les suspensions de contrat sont comptabilisées dans l'ancienneté
+        //- Pas de seuil/tranche de calcul
+        //- 1/4 de mois de salaire par année d'ancienneté
+        //- Pas de majoration de 50% d'ancienneté sur les périodes en forfait jours des non-cadres
+        let tranchesIndemniteCadreBruteInf8ans = [
+            {ancienneteMois:0, taux:1/4}
+        ]
+        let indemniteCadreBruteInf8ans = calculerIndemniteTranches(true, tranchesIndemniteCadreBruteInf8ans, false);
+        console.log('indemniteCadreBruteInf8ans', indemniteCadreBruteInf8ans);
+
+        //Cadre >= 8 ans
+        //- Les suspensions de contrat sont comptabilisées dans l'ancienneté
+        //- 1/5 de mois de salaire par année d'ancienneté jusqu'à 7 ans
+        //- 3/5 de mois de salaire par année d'ancienneté après 7 ans
+        //- Pas de majoration de 50% d'ancienneté sur les périodes en forfait jours des non-cadres
+        let tranchesIndemniteCadreBruteSup8ans = [
+            {ancienneteMois:0, taux:1/5},
+            {ancienneteMois:7 * 12, taux:3/5}
+        ]
+        let indemniteCadreBruteSup8ans = calculerIndemniteTranches(true, tranchesIndemniteCadreBruteSup8ans, false);
+        console.log('indemniteCadreBruteSup8ans', indemniteCadreBruteSup8ans);
+        
+        //Choix de la base de calcul de l'indemnité d'un cadre suivant son ancienneté pour les calculs suivants
+        let cadreBase = ancienneteMois < 8*12 ? indemniteCadreBruteInf8ans : indemniteCadreBruteSup8ans;
+        document.getElementById("3248_ancienneteConvCadre").innerText = (cadreBase.cumulAnciennete / 12).toFixed(2);
+
+        document.getElementById("3248_cadreInf8ans").innerText = indemniteCadreBruteInf8ans.indemniteTotal.toFixed(2);
+
+        let _3248_cadreInf7ans = 0;
+        indemniteCadreBruteSup8ans.detailPeriode.forEach(periode => _3248_cadreInf7ans+= periode[0].indemniteTranche);
+        document.getElementById("3248_cadreInf7ans").innerText = _3248_cadreInf7ans.toFixed(2);
+
+        let _3248_cadreSup7ans = 0;
+        indemniteCadreBruteSup8ans.detailPeriode.forEach(periode => _3248_cadreSup7ans+= periode[1].indemniteTranche);
+        document.getElementById("3248_cadreSup7ans").innerText = _3248_cadreSup7ans.toFixed(2);
+
+        document.getElementById("3248_cadreBase").innerText = cadreBase.indemniteTotal.toFixed(2);
+        
+        //Majoration et minoration indemnité suivant l'âge et l'ancienneté
+        let cadreTotal = calculerMajoMinoCadre(cadreBase.indemniteTotal, "3248");
+
+        //Indemnité légale la plus favorable selon le statut cadre et la date de notification
+        let legale = 0;
+        
+        document.getElementById("legale_group").style.backgroundColor = "grey";
+        document.getElementById("0943_nonCadre_group").style.backgroundColor = "grey";
+        document.getElementById("0650_cadre_group").style.backgroundColor = "grey";
+        document.getElementById("3248_nonCadre_group").style.backgroundColor = "grey";
+        document.getElementById("3248_cadre_group").style.backgroundColor = "grey";
+
+        if (calculerDifferenceJours('2024-01-01', dateNotification) >= 0){   //Si date de notification > 01/01/2024, c'est la nouvelle convention harmonisée IDCC 3248 qui est prise en compte
+            legale = statutCadre ? Math.max(legalTotal, cadreTotal) : Math.max(legalTotal, nonCadreTotal);
+            if(legalTotal === legale){
+                document.getElementById("legale_group").style.backgroundColor = "green";
+            }
+            else{
+                if(cadreTotal === legale){
+                    document.getElementById("3248_cadre_group").style.backgroundColor = "green";
+                }
+                
+                if(nonCadreTotal === legale){
+                    document.getElementById("3248_nonCadre_group").style.backgroundColor = "green";
+                }
+            }
+        }
+        else{
+            legale = statutCadre ? Math.max(legalTotal, _0650_cadreTotal) : Math.max(legalTotal, _0943_nonCadreTotal);
+            if(legalTotal === legale){
+                document.getElementById("legale_group").style.backgroundColor = "green";
+            }
+            else{
+                if(_0650_cadreTotal === legale){
+                    document.getElementById("0650_cadre_group").style.backgroundColor = "green";
+                }
+                
+                if(_0943_nonCadreTotal === legale){
+                    document.getElementById("0943_nonCadre_group").style.backgroundColor = "green";
+                }
+            }
+        }
+        document.getElementById("legale").innerText = legale.toFixed(2);
+        
+    
+        /*Indemnité Supra-légale*/
+        let supraBrut = calculerIndemniteSupra();
+
+        let iclSupraBrut = supraBrut + legale;
+        document.getElementById("iclSupraBrut").innerText = iclSupraBrut.toFixed(2);
+        
+        let iclSupraPlancher = iclSupraBrut;
+        if(iclSupraPlancher <= plancher){
+            iclSupraPlancher = plancher;
+        }
+        document.getElementById("iclSupraPlancher").innerText = iclSupraPlancher.toFixed(2);
+
+        /*Indemnité totale brute*/
+        let iclSupraPlafondMois = iclSupraPlancher > plafondMois * salaireReference ? plafondMois * salaireReference : iclSupraPlancher;
+        document.getElementById("iclSupraPlafondMois").innerText = iclSupraPlafondMois.toFixed(2);
+        
+        let iclSupraPlafondMontant = iclSupraPlafondMois > plafondMontant ? plafondMontant : iclSupraPlafondMois;
+        document.getElementById("iclSupraPlafondMontant").innerText = iclSupraPlafondMontant.toFixed(2);
+
+        let eligibleAncienneteMinimale = ancienneteMoisNotification >= 8 ? iclSupraPlafondMontant : 0;
+        document.getElementById("eligibleAncienneteMinimale").innerText = eligibleAncienneteMinimale.toFixed(2);
+
+        let iclSupraTotal = eligibleAncienneteMinimale;
+        document.getElementById("iclSupraTotal").innerText = iclSupraTotal.toFixed(2);
+
+        /*Cotisations*/
+        /**Cotisations sociales**/
+        //legale = 15000;            //Pour faire des tests sur les cotisations
+        //iclSupraTotal = 500000;     //Pour faire des tests sur les cotisations
+
+        let montantSoumisCotisationSociale = 0;
+        if(iclSupraTotal >= 439920){
+            montantSoumisCotisationSociale = iclSupraTotal;
+        }
+        else if (iclSupraTotal >= 87984){
+            montantSoumisCotisationSociale = iclSupraTotal - 87984;
+        }
+        document.getElementById("cotisationsSociales").innerText = montantSoumisCotisationSociale.toFixed(2);
+
+        let exonerationCotisationsSociales = iclSupraTotal - montantSoumisCotisationSociale;
+
+        /**CSG/CRDS**/
+        let exonerationCSG_CRDS = Math.min(legale, exonerationCotisationsSociales);
+        let montantSoumisCSG_CRDS = iclSupraTotal - exonerationCSG_CRDS;
+        document.getElementById("CSG_CRDS").innerText = montantSoumisCSG_CRDS.toFixed(2);
+
+        //Gestion de l'affichage des groupe de lignes du tableau de calcul
+        calculIndemniteTableau.hidden = false;
+        let IDCC0943_nonCadre_rows = document.getElementsByClassName("IDCC0943_nonCadre");
+        for(let i=0; i < IDCC0943_nonCadre_rows.length; i++){
+            IDCC0943_nonCadre_rows[i].hidden = statutCadre || calculerDifferenceJours('2024-01-01', dateNotification) >= 0;
+            console.log(IDCC0943_nonCadre_rows[i].hidden);
+        }
+        
+        let IDCC0650_cadre_rows = document.getElementsByClassName("IDCC0650_cadre");
+        for(let i=0; i < IDCC0650_cadre_rows.length; i++){
+            IDCC0650_cadre_rows[i].hidden = !statutCadre || calculerDifferenceJours('2024-01-01', dateNotification) >= 0;
+            console.log(IDCC0650_cadre_rows[i].hidden);
+        }
+
+        let IDCC3248_nonCadre_rows = document.getElementsByClassName("IDCC3248_nonCadre");
+        for(let i=0; i < IDCC3248_nonCadre_rows.length; i++){
+            IDCC3248_nonCadre_rows[i].hidden = statutCadre || calculerDifferenceJours('2024-01-01', dateNotification) < 0;
+            console.log(IDCC3248_nonCadre_rows[i].hidden);
+        }
+
+        let IDCC3248_cadre_rows = document.getElementsByClassName("IDCC3248_cadre");
+        for(let i=0; i < IDCC3248_cadre_rows.length; i++){
+            IDCC3248_cadre_rows[i].hidden = !statutCadre || calculerDifferenceJours('2024-01-01', dateNotification) < 0;
+            console.log(IDCC3248_cadre_rows[i].hidden);
+        }
+    }
+
+    document.getElementById("calculerIndemnite").addEventListener("click", calculerIndemnite, false);
+
+    /*Fonction pour gérer les dates et durées*/
+    /**Donne le nombre de mois complet entre 2 dates**/
+    function calculerDifferenceMois(dateDebut, dateFin) {
+        let debut = new Date(dateDebut);
+        let fin = new Date(dateFin);
+        let dateFinMoisComplet = new Date(fin.getFullYear(), fin.getMonth(), debut.getDate());
+
+        let differenceAnnees = fin.getFullYear() - debut.getFullYear();
+        let differenceMois = fin.getMonth() - debut.getMonth();
+        
+        let totalMois = differenceAnnees * 12 + differenceMois;
+        let nombreJourPeriode = calculerDifferenceJours(dateDebut, dateFin);
+
+        return calculerDifferenceJours(dateFin, dateFinMoisComplet) >= 0 ? totalMois - 1 : totalMois;
+    }
+
+    /**Ajoute un nombre de mois à une date pour déduire une nouvelle date**/
+    function ajouterMois(dateEntree, dureeMois) {
+        let date = new Date(dateEntree); // Créer une nouvelle instance de Date avec la date d'entrée
+
+        let annee = date.getFullYear();
+        let mois = date.getMonth();
+
+        // Ajouter la durée en mois
+        mois += dureeMois;
+
+        // Gérer le dépassement des années
+        annee += Math.floor(mois / 12);
+        mois = mois % 12;
+
+        // Définir la nouvelle année et le nouveau mois
+        date.setFullYear(annee);
+        date.setMonth(mois);
+
+        return date;
+    }
+
+    /**Calculer le nombre de jours du mois**/
+    function nombreJoursMois(date) {
+        let annee = date.getFullYear();
+        let moisSuivant = date.getMonth() + 1; // Le mois est indexé à 0 (pour janvier...)
+
+        //console.log('moisSuivant (Index) :', moisSuivant);
+
+        let premierJourMoisSuivant = new Date(annee, moisSuivant, 1);
+        //console.log('premierJourMoisSuivant :', premierJourMoisSuivant);
+        let dernierJourMoisCourant = new Date(premierJourMoisSuivant - 1);
+        //console.log('dernierJourMoisCourant :', dernierJourMoisCourant);
+
+        return dernierJourMoisCourant.getDate();
+    }
+
+    /**Calculer le nombre de jours entre 2 dates**/
+    function calculerDifferenceJours(dateDebut, dateFin) {
+        let debut = new Date(dateDebut);
+        let fin = new Date(dateFin);
+
+        let differenceTemps = fin.getTime() - debut.getTime();
+        let differenceJours = Math.floor(differenceTemps / (1000 * 60 * 60 * 24));
+
+        return differenceJours;
+    }
+</script>

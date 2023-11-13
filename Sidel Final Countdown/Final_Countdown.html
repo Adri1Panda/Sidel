@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIDEL - Final Countdown</title>
+    <style>
+        * {
+            margin: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: black;
+            background-image: url('background.png');
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            background-size: 100% 100%;
+        }
+
+        h1 {
+            font-size: 5vmax;
+        }
+
+        .days {
+            font-size: 22vmax;
+        }
+
+        .time {
+            font-size: 5vmax;
+        }
+
+        .text-days {
+            font-size: 5vmax;
+        }
+    </style>
+</head>
+<body>
+    <h1>SIDEL LSX - Final Countdown</h1>
+    <div class="countdown-container">
+        <div class="deadline-input">
+            <label for="deadline">Date d'échéance :</label>
+            <input type="datetime-local" id="deadline" value="2023-11-30 16:00:00">
+        </div>
+        <div id="countdown">
+            <div class="days">0 jours</div>
+            <div class="text-days">
+                (ouvrés restants)
+            </div>
+            <div class="time">0h 0m 0s</div>
+        </div>
+    </div>
+    <footer>
+        <audio id="audioPlayer" ><!-- controls -->
+            <source src="The Final Countdown (2019 Remaster) [8 Bit Tribute to Europe] - 8 Bit Universe.mp3" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+        <p>Music : <a href="https://www.youtube.com/watch?v=cB2zgUFhNLU&ab_channel=8BitUniverse">The Final Countdown (2019 Remaster) [8 Bit Tribute to Europe] - 8 Bit Universe</a></p>
+    </footer>
+    <script>
+        var audioPlayer = document.getElementById("audioPlayer");
+        var audioPlayed = false; 
+        
+        function datesAreOnSameDay(date1, date2) {
+            return (
+                date1.getFullYear() === date2.getFullYear() &&
+                date1.getMonth() === date2.getMonth() &&
+                date1.getDate() === date2.getDate()
+            );
+        }
+
+        function calculateBusinessDays(startDate, endDate, daysOff) {
+            let count = 0;
+            let currentDate = new Date(startDate);
+
+            if(startDate > endDate){
+                count = -1;
+                return count;
+            }
+
+            if(datesAreOnSameDay(startDate, endDate)){
+                return count;
+            }
+
+            while (currentDate <= endDate) {
+                const dayOfWeek = currentDate.getDay();
+
+                let dayOff = false;
+                for(let dayOffIndex = 0 ; dayOffIndex < daysOff.length ; dayOffIndex++){
+                    if(datesAreOnSameDay(currentDate, daysOff[dayOffIndex])){
+                        dayOff = true;
+                    }
+                }
+
+                if (dayOfWeek >= 1 && dayOfWeek <= 5 && !dayOff) {
+                    count++;
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            return count - 1;
+        }
+
+        
+        function calculateDays(startDate, endDate) {
+            let count = 0;
+            let currentDate = new Date(startDate);
+
+            if(startDate > endDate){
+                count = -1;
+            }
+            
+            if(datesAreOnSameDay(startDate, endDate)){
+                return count;
+            }
+
+            while (currentDate <= endDate) {
+                const dayOfWeek = currentDate.getDay();
+                count++;
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            return count;
+        }
+
+        function updateCountdown() {
+            const deadlineInput = document.getElementById('deadline');
+            const countdownContainer = document.getElementById('countdown');
+            const daysElement = document.querySelector('.days');
+            const timeElement = document.querySelector('.time');
+            const textDaysContainer = document.querySelector('.text-days');
+
+            const deadlineDate = new Date(deadlineInput.value);
+            const currentDate = new Date();
+            const daysOff = [new Date("2023-11-01"), new Date("2023-11-11")];
+            const businessDaysRemaining = calculateBusinessDays(currentDate, deadlineDate, daysOff);
+            const daysRemaining = calculateDays(currentDate, deadlineDate);
+            //console.log("jours restants : ", daysRemaining);
+
+            // Obtenez une référence à l'élément body pour changer le background
+            const body = document.body;
+
+            if (businessDaysRemaining < 0) {
+                daysElement.textContent = '';
+                timeElement.textContent = 'Game Over';
+                textDaysContainer.textContent = '';
+                // Modifiez la propriété backgroundImage pour changer le fond
+                body.style.backgroundImage = 'url("background_hell.png")';
+            } else {
+                
+                // Modifiez la propriété backgroundImage pour changer le fond
+                
+                textDaysContainer.textContent = '(ouvrés restants)';
+                body.style.backgroundImage = 'url("background.png")';
+                daysElement.textContent = businessDaysRemaining + ' jours';
+                let timeRemaining = deadlineDate - currentDate;   //This gives the milliseconds duration between 2 dates, this adds 1 hour from the summertime
+                console.log("timeRemaining [ms] = ", timeRemaining);
+                if(currentDate - new Date("2023-10-29") < 0 & deadlineDate - new Date("2023-10-29T03:00:00") >= 0){
+                    timeRemaining = timeRemaining - 3600000;
+                    console.log("WinterTime");
+                }
+                const hours = Math.floor(timeRemaining / 3600000) % 24;
+                const minutes = Math.floor(timeRemaining / 60000) % 60;
+                const seconds = Math.floor(timeRemaining / 1000) % 60;
+                timeElement.textContent =
+                hours.toLocaleString(undefined, {minimumIntegerDigits: 2,useGrouping: false}) + 'h ' +
+                minutes.toLocaleString(undefined, {minimumIntegerDigits: 2,useGrouping: false}) + 'm ' +
+                seconds.toLocaleString(undefined, {minimumIntegerDigits: 2,useGrouping: false}) + 's';
+
+                if (audioPlayer.duration > businessDaysRemaining * 86400 + hours * 3600 + minutes * 60 + seconds && !audioPlayed){
+                    audioPlayer.play();
+                    audioPlayed = true;
+                }
+            }
+            
+        }
+
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+    </script>
+</body>
+</html>
